@@ -4,6 +4,8 @@ import os
 import math
 import struct
 import webbrowser
+import threading
+import re
 
 # Constants
 SCREEN_WIDTH = 1000
@@ -38,7 +40,7 @@ NIGHT_BG = (60, 60, 60)
 SCORE_CYCLE = 800
 
 # Current version
-VERSION = [1, 3]
+VERSION = [1, 4]
 
 # Coin rate: 1 coin per 20 points
 COIN_RATE = 20
@@ -48,14 +50,14 @@ SHOP_ITEMS = {
     "consumables": {
         "shield": {
             "name": {"EN": "Shield", "DE": "Schild", "RU": "Щит"},
-            "cost": 200,
+            "cost": 100,
             "desc": {"EN": "Absorb one hit", "DE": "Blockt einen Treffer", "RU": "Блокирует удар"},
             "key": "Z"
         },
         "score_mult": {
             "name": {"EN": "Score Multiplier", "DE": "Punkteverdoppler", "RU": "Удвоитель очков"},
-            "cost": 150,
-            "desc": {"EN": "2x points for 20s", "DE": "2x Punkte fur 20s", "RU": "2x очков на 20с"},
+            "cost": 100,
+            "desc": {"EN": "2x points for 20s", "DE": "2x Punkte für 20s", "RU": "2x очков на 20с"},
             "key": "X"
         },
         "head_start": {
@@ -66,7 +68,7 @@ SHOP_ITEMS = {
         },
         "mini_dinos": {
             "name": {"EN": "Mini-Dinos", "DE": "Mini-Dinos", "RU": "Мини-динозавры"},
-            "cost": 80,
+            "cost": 100,
             "desc": {"EN": "0.8x dino scale 20s", "DE": "0.8x Dino-Größe 20s", "RU": "0.8x размер динозавров 20с"},
             "key": "V"
         },
@@ -74,21 +76,22 @@ SHOP_ITEMS = {
     "skins": {},
     "upgrades": {
         "coin_bonus": {
-            "name": {"EN": "Coin Bonus 1.2x", "DE": "Munzbonus 1.2x", "RU": "Бонус монет 1.2x"},
+            "name": {"EN": "Coin Bonus 1.2x", "DE": "Münzbonus 1.2x", "RU": "Бонус монет 1.2x"},
             "cost": 777,
-            "desc": {"EN": "20% more coins forever", "DE": "20% mehr Munzen fur immer", "RU": "20% больше монет навсегда"},
+            "desc": {"EN": "20% more coins forever", "DE": "20% mehr Münzen für immer", "RU": "20% больше монет навсегда"},
             "key": None
         },
     },
     "special": {
         "immortal": {
             "name": {"EN": "Immortal Mode", "DE": "Unsterblich", "RU": "Бессмертный режим"},
-            "cost": 500,
-            "desc": {"EN": "Practice, no score", "DE": "Uben, keine Punkte", "RU": "Тренировка, без очков"},
+            "cost": 1000,
+            "desc": {"EN": "Practice, no score", "DE": "Üben, keine Punkte", "RU": "Тренировка, без очков"},
             "key": None
         },
     }
 }
+
 # Language dictionaries
 LANGUAGES = {
     "EN": {
@@ -99,11 +102,15 @@ LANGUAGES = {
         "high_score": "HIGH SCORE", "score_label": "SCORE",
         "total_score": "Total Score", "total_time": "Total Time",
         "total_jumps": "Total Jumps", "dark_mode": "Dark mode",
-        "time_switches": "Toggle time switches", "language": "EN", "beta": "",
+        "time_switches": "Toggle time switches",
+        "check_updates": "Check for updates",
+        "language": "EN", "beta": "",
         "shop_title": "SHOP", "consumables": "Consumables", "skins_cat": "Skins",
         "upgrades": "Upgrades", "special": "Special",
         "owned": "Owned", "buy": "Buy", "equip": "Equip", "equipped": "Equipped",
         "immortal_btn": "I", "back": "Press ESC to return",
+        "update_available": "Update {ver} available!",
+        "download_btn": "DOWNLOAD",
     },
     "DE": {
         "play": "SPIELEN", "shop": "SHOP", "skins": "SKINS",
@@ -113,25 +120,33 @@ LANGUAGES = {
         "high_score": "HIGH SCORE", "score_label": "PUNKTE",
         "total_score": "Gesamtpunkte", "total_time": "Gesamtzeit",
         "total_jumps": "Spruenge", "dark_mode": "Dunkelmodus",
-        "time_switches": "Tag/Nacht wechseln", "language": "DE", "beta": "",
+        "time_switches": "Tag/Nacht wechseln",
+        "check_updates": "Updates prüfen",
+        "language": "DE", "beta": "",
         "shop_title": "SHOP", "consumables": "Verbrauchbar", "skins_cat": "Skins",
         "upgrades": "Upgrades", "special": "Spezial",
         "owned": "Besitzt", "buy": "Kaufen", "equip": "Anlegen", "equipped": "Angelegt",
         "immortal_btn": "I", "back": "ESC zum Zurueck",
+        "update_available": "Update {ver} verfügbar!",
+        "download_btn": "HERUNTERLADEN",
     },
     "RU": {
         "play": "ИГРАТЬ", "shop": "МАГАЗИН", "skins": "СКИНЫ",
         "settings": "НАСТРОЙКИ", "info": "ИНФО", "stats": "СТАТИСТИКА", "exit": "ВЫХОД",
         "menu": "МЕНЮ", "pause": "ПАУЗА", "resume": "ESC - Продолжить",
         "restart": "ПРОБЕЛ - Заново", "start": "ПРОБЕЛ - Начать",
-        "high_score": "РЕКОРД", "score_label": "СЧЁТ",
+        "high_score": "НОВЫЙ РЕКОРД", "score_label": "СЧЁТ",
         "total_score": "Всего очков", "total_time": "Время игры",
         "total_jumps": "Прыжков", "dark_mode": "Тёмный режим",
-        "time_switches": "Смена дня и ночи", "language": "RU", "beta": "",
+        "time_switches": "Смена дня и ночи",
+        "check_updates": "Проверка обновлений",
+        "language": "RU", "beta": "",
         "shop_title": "МАГАЗИН", "consumables": "Расходники", "skins_cat": "Скины",
         "upgrades": "Улучшения", "special": "Особое",
         "owned": "Куплено", "buy": "Купить", "equip": "Надеть", "equipped": "Надето",
         "immortal_btn": "Б", "back": "ESC - Назад",
+        "update_available": "Доступно обновление {ver}!",
+        "download_btn": "СКАЧАТЬ",
     }
 }
 
@@ -225,21 +240,26 @@ class Ground:
 
 
 # Data handling
-def pack_settings(dark_mode, time_switches_on, lang):
+def pack_settings(dark_mode, time_switches_on, check_updates, lang):
+    """Pack all settings into a byte: bits 0-1 lang, 2 dark_mode, 3 time_switches, 4 check_updates."""
     lang_map = {"EN": 0, "DE": 1, "RU": 2}
     val = lang_map.get(lang, 0)
     if dark_mode:
         val |= 0b0100
     if time_switches_on:
         val |= 0b1000
+    if check_updates:
+        val |= 0b10000
     return val
 
 def unpack_settings(byte):
+    """Unpack the settings byte. Returns (dark_mode, time_switches_on, check_updates, lang)."""
     lang_map = {0: "EN", 1: "DE", 2: "RU"}
     lang = lang_map.get(byte & 0b0011, "EN")
     dark_mode = bool(byte & 0b0100)
     time_switches_on = bool(byte & 0b1000)
-    return dark_mode, time_switches_on, lang
+    check_updates = bool(byte & 0b10000)
+    return dark_mode, time_switches_on, check_updates, lang
 
 def pack_shop_items(owned_items):
     val = 0
@@ -263,12 +283,13 @@ def unpack_shop_items(val):
 
 def load_progress():
     if not os.path.exists("data.bin"):
-        return 0, 0, 0, 0, 0, set(), [0, 0], False, True, "EN"
+        return 0, 0, 0, 0, 0, set(), [0, 0], False, True, True, "EN"
     try:
         with open("data.bin", "rb") as f:
             data = f.read()
         dark_mode = False
         time_switches_on = True
+        check_updates = True
         lang = "EN"
         coins = 0
         owned_items = set()
@@ -284,12 +305,12 @@ def load_progress():
             owned_items = unpack_shop_items(shop_val)
         if len(data) >= 27:
             settings_byte = data[26]
-            dark_mode, time_switches_on, lang = unpack_settings(settings_byte)
-        return high, total_score, total_time, total_jumps, coins, owned_items, ver, dark_mode, time_switches_on, lang
+            dark_mode, time_switches_on, check_updates, lang = unpack_settings(settings_byte)
+        return high, total_score, total_time, total_jumps, coins, owned_items, ver, dark_mode, time_switches_on, check_updates, lang
     except:
-        return 0, 0, 0, 0, 0, set(), [0, 0], False, True, "EN"
+        return 0, 0, 0, 0, 0, set(), [0, 0], False, True, True, "EN"
 
-def save_progress(high, total_score, total_seconds, jumps, coins, owned_items, version, dark_mode, time_switches_on, lang):
+def save_progress(high, total_score, total_seconds, jumps, coins, owned_items, version, dark_mode, time_switches_on, check_updates, lang):
     try:
         with open("data.bin", "wb") as f:
             f.write(struct.pack('<BB', version[0], version[1]))
@@ -297,7 +318,7 @@ def save_progress(high, total_score, total_seconds, jumps, coins, owned_items, v
             f.write(struct.pack('<I', coins))
             shop_val = pack_shop_items(owned_items)
             f.write(struct.pack('<I', shop_val))
-            settings_byte = pack_settings(dark_mode, time_switches_on, lang)
+            settings_byte = pack_settings(dark_mode, time_switches_on, check_updates, lang)
             f.write(bytes([settings_byte]))
     except:
         pass
@@ -321,6 +342,44 @@ def draw_big_score(screen, font, number, size, centre):
     screen.blit(text, text.get_rect(center=centre))
 
 
+# Update checker – runs in a background thread
+remote_version = None       # set after check completes
+update_check_done = False   # True once the thread finishes
+
+def check_for_updates():
+    """Fetch the latest release version from GitHub. Runs in a daemon thread."""
+    global remote_version, update_check_done
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+
+        url = "https://github.com/fomybe/cactusjump/releases/tag/release"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        title_tag = soup.find("title")
+        if not title_tag or not title_tag.string:
+            update_check_done = True
+            return
+
+        title = title_tag.string.strip()
+        match = re.search(r"Release\s+(?:v)?(\d+)\.(\d+)", title)
+        if not match:
+            update_check_done = True
+            return
+
+        remote_version = [int(match.group(1)), int(match.group(2))]
+    except Exception:
+        # Network error, missing libraries, parsing failure – silently ignore
+        pass
+    finally:
+        update_check_done = True
+
+
 # Main game
 def main():
     pygame.init()
@@ -330,10 +389,12 @@ def main():
 
     sprite_path = os.path.join("assets", "sprite.png")
     if not os.path.exists(sprite_path):
+        print("Missing assets/sprite.png! Put it in the assets folder.")
         pygame.quit()
         return
     sheet = pygame.image.load(sprite_path).convert_alpha()
 
+    # Set the window icon to the cactus
     cactus_icon = sheet.subsurface(pygame.Rect(CACTUS_X, CACTUS_Y_SPRITE, CACTUS_W, CACTUS_H))
     pygame.display.set_icon(cactus_icon)
 
@@ -362,7 +423,7 @@ def main():
     tiny_font = pygame.font.Font(font_path, 16) if os.path.exists(font_path) else pygame.font.Font(None, 16)
 
     # Load persistent data
-    high_score, total_score, saved_seconds, total_jumps, coins, owned_items, saved_ver, dark_mode, time_switches_on, lang = load_progress()
+    high_score, total_score, saved_seconds, total_jumps, coins, owned_items, saved_ver, dark_mode, time_switches_on, check_updates, lang = load_progress()
     total_frames = saved_seconds * FPS
 
     def get_font_small():
@@ -380,12 +441,17 @@ def main():
             return ru_font_tiny
         return tiny_font
 
+    # Start update check in background thread if enabled
+    if check_updates:
+        update_thread = threading.Thread(target=check_for_updates, daemon=True)
+        update_thread.start()
+
     # Version bounce animation
     version_bounce_timer = 0
     version_bounce_active = False
     if saved_ver != VERSION:
         version_bounce_active = True
-        version_bounce_timer = 5 * FPS
+        version_bounce_timer = 15 * FPS
 
     # The player and world
     player = Cactus(100, PLATFORM_Y - CACTUS_H)
@@ -455,22 +521,27 @@ def main():
     cat_btn_h = 40
     cat_start_y = 200
     for i, cat in enumerate(shop_categories):
-        cat_buttons[cat] = pygame.Rect(80, cat_start_y + i * (cat_btn_h + 10), 250, cat_btn_h)
+        cat_buttons[cat] = pygame.Rect(80, cat_start_y + i * (cat_btn_h + 10), 220, cat_btn_h)
 
     buy_buttons = {}
     item_start_y = 200
     item_x = 350
 
-    # Settings panel
-    settings_panel = pygame.Rect(SCREEN_WIDTH//2 - 250, 100, 500, 300)
-    dark_mode_check = pygame.Rect(settings_panel.x + 40, settings_panel.y + 100, 30, 30)
-    time_check = pygame.Rect(settings_panel.x + 40, settings_panel.y + 160, 30, 30)
+    # Settings panel – extended height for the new checkbox
+    settings_panel = pygame.Rect(SCREEN_WIDTH//2 - 250, 100, 500, 340)
+    dark_mode_check = pygame.Rect(settings_panel.x + 40, settings_panel.y + 90, 30, 30)
+    time_check = pygame.Rect(settings_panel.x + 40, settings_panel.y + 145, 30, 30)
+    updates_check = pygame.Rect(settings_panel.x + 40, settings_panel.y + 200, 30, 30)
     settings_visible = False
     stats_panel = pygame.Rect(SCREEN_WIDTH//2 - 250, 100, 500, 300)
     stats_visible = False
     info_panel = pygame.Rect(SCREEN_WIDTH//2 - 200, 150, 400, 200)
     info_visible = False
     github_btn = pygame.Rect(info_panel.centerx - 80, info_panel.bottom - 50, 160, 35)
+
+    # Update popup on the menu (bigger)
+    update_popup = pygame.Rect(SCREEN_WIDTH//2 - 250, SCREEN_HEIGHT//2 - 90, 500, 180)
+    download_btn_rect = pygame.Rect(update_popup.centerx - 120, update_popup.bottom - 60, 240, 45)
 
     close_w = 20
     close_h = 20
@@ -488,9 +559,9 @@ def main():
 
         # Blend the background colour based on day/night cycle
         active_score = score if state != "menu" else 0
-        pos_in_cycle = active_score % SCORE_CYCLE
-        blend = pos_in_cycle / SCORE_CYCLE
-        smooth = (math.sin((blend - 0.5) * math.pi) + 1) / 2
+        cycle_length = SCORE_CYCLE * 2      # 1600 points for full day→night→day
+        cycle_pos = active_score % cycle_length
+        smooth = (math.sin((cycle_pos / cycle_length) * 2 * math.pi - math.pi / 2) + 1) / 2
 
         if dark_mode:
             day_col = NIGHT_BG
@@ -515,7 +586,7 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 total_sec = total_frames // FPS
-                save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
                 running = False
 
             if event.type == pygame.KEYDOWN:
@@ -523,9 +594,8 @@ def main():
                     if state == "playing":
                         paused = not paused
                     elif state == "over":
-                        # Return to menu
                         total_sec = total_frames // FPS
-                        save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                        save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
                         state = "menu"
                         dinos.clear()
                         speed = 0.0
@@ -608,7 +678,7 @@ def main():
                                     dino_scale_mult = 0.8
                                     owned_items.discard(item_id)
                                 total_sec = total_frames // FPS
-                                save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                                save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse = event.pos
@@ -667,7 +737,7 @@ def main():
                             stats_visible = False
                     elif exit_btn.collidepoint(mouse):
                         total_sec = total_frames // FPS
-                        save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                        save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
                         running = False
                     elif lang_btn.collidepoint(mouse):
                         if lang == "EN":
@@ -677,7 +747,15 @@ def main():
                         else:
                             lang = "EN"
                         total_sec = total_frames // FPS
-                        save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                        save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
+
+                    # Update popup download button
+                    if update_check_done and remote_version is not None:
+                        if (remote_version[0] > VERSION[0] or
+                            (remote_version[0] == VERSION[0] and remote_version[1] > VERSION[1])):
+                            if download_btn_rect.collidepoint(mouse):
+                                webbrowser.open("https://github.com/fomybe/cactusjump/releases/tag/release")
+
                     # Close buttons on panels
                     if settings_visible and close_settings_btn.collidepoint(mouse):
                         settings_visible = False
@@ -692,11 +770,19 @@ def main():
                         if dark_mode_check.collidepoint(mouse):
                             dark_mode = not dark_mode
                             total_sec = total_frames // FPS
-                            save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                            save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
                         if time_check.collidepoint(mouse):
                             time_switches_on = not time_switches_on
                             total_sec = total_frames // FPS
-                            save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                            save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
+                        if updates_check.collidepoint(mouse):
+                            check_updates = not check_updates
+                            total_sec = total_frames // FPS
+                            save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
+                            # If just enabled and haven't checked yet, start a check
+                            if check_updates and not update_check_done:
+                                update_thread = threading.Thread(target=check_for_updates, daemon=True)
+                                update_thread.start()
 
                 elif state == "shop":
                     for cat, btn in cat_buttons.items():
@@ -710,12 +796,12 @@ def main():
                                     coins -= item["cost"]
                                     owned_items.add(item_id)
                                     total_sec = total_frames // FPS
-                                    save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                                    save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
 
                 elif state == "playing" and paused:
                     if menu_btn.collidepoint(mouse):
                         total_sec = total_frames // FPS
-                        save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                        save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
                         state = "menu"
                         paused = False
                         dinos.clear()
@@ -734,7 +820,7 @@ def main():
                 elif state == "over":
                     if menu_btn_gameover.collidepoint(mouse):
                         total_sec = total_frames // FPS
-                        save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                        save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
                         state = "menu"
                         dinos.clear()
                         speed = 0.0
@@ -781,13 +867,10 @@ def main():
             if len(dinos) == 0 or dinos[-1].x < SCREEN_WIDTH - spawn_gap:
                 scale = random.uniform(0.6, 1.0)
                 dinos.append(Dino(SCREEN_WIDTH + 50, scale, dino_frames, dino_scale_mult))
-                # Pairs can appear with any dino size
                 if random.random() < 0.4:
                     dinos.append(Dino(SCREEN_WIDTH + 150, scale, dino_frames, dino_scale_mult))
-                    # Triples when score is above 500
                     if score > 500 and random.random() < 0.3:
                         dinos.append(Dino(SCREEN_WIDTH + 250, scale, dino_frames, dino_scale_mult))
-                        # Quad when score is above 1200
                         if score > 1200 and random.random() < 0.3:
                             dinos.append(Dino(SCREEN_WIDTH + 350, scale, dino_frames, dino_scale_mult))
 
@@ -814,7 +897,7 @@ def main():
                     old_coins = coins
                     coins += coin_earned
                     total_sec = total_frames // FPS
-                    save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                    save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
                     anim_frame = 0
                     active_shield = False
                     active_score_mult = False
@@ -833,7 +916,7 @@ def main():
                 version_bounce_active = False
                 saved_ver = VERSION[:]
                 total_sec = total_frames // FPS
-                save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, lang)
+                save_progress(high_score, total_score, total_sec, total_jumps, coins, owned_items, VERSION, dark_mode, time_switches_on, check_updates, lang)
 
         # Draw everything
         screen.fill(bg_colour)
@@ -927,6 +1010,23 @@ def main():
             pygame.draw.rect(screen, (255, 255, 255), lang_btn, 2)
             lang_txt = get_font_small().render(lang, True, (255, 255, 255))
             screen.blit(lang_txt, lang_txt.get_rect(center=lang_btn.center))
+
+            # Update popup – shown when a newer version is detected
+            if update_check_done and remote_version is not None:
+                if (remote_version[0] > VERSION[0] or
+                    (remote_version[0] == VERSION[0] and remote_version[1] > VERSION[1])):
+                    # Draw the popup
+                    pygame.draw.rect(screen, (40, 40, 40), update_popup)
+                    pygame.draw.rect(screen, (200, 200, 200), update_popup, 2)
+
+                    ver_str = f"v{remote_version[0]}.{remote_version[1]}"
+                    msg = lang_dict["update_available"].format(ver=ver_str)
+                    msg_surf = get_font_small().render(msg, True, (255, 255, 255))
+                    screen.blit(msg_surf, msg_surf.get_rect(center=(update_popup.centerx, update_popup.y + 35)))
+
+                    pygame.draw.rect(screen, (0, 200, 0), download_btn_rect, 2)
+                    dl_surf = get_font_small().render(lang_dict["download_btn"], True, (0, 200, 0))
+                    screen.blit(dl_surf, dl_surf.get_rect(center=download_btn_rect.center))
 
         # Shop screen
         elif state == "shop":
@@ -1097,17 +1197,24 @@ def main():
             pygame.draw.line(screen, (255, 255, 255), close_settings_btn.topright, close_settings_btn.bottomleft, 5)
 
             dm_text = get_font_small().render(lang_dict["dark_mode"], True, (255, 255, 255))
-            screen.blit(dm_text, (settings_panel.x + 90, settings_panel.y + 95))
+            screen.blit(dm_text, (settings_panel.x + 90, settings_panel.y + 85))
             pygame.draw.rect(screen, (255, 255, 255), dark_mode_check, 2)
             if dark_mode:
                 inner = dark_mode_check.inflate(-6, -6)
                 pygame.draw.rect(screen, (255, 255, 255), inner)
 
             ts_text = get_font_small().render(lang_dict["time_switches"], True, (255, 255, 255))
-            screen.blit(ts_text, (settings_panel.x + 90, settings_panel.y + 155))
+            screen.blit(ts_text, (settings_panel.x + 90, settings_panel.y + 140))
             pygame.draw.rect(screen, (255, 255, 255), time_check, 2)
             if time_switches_on:
                 inner = time_check.inflate(-6, -6)
+                pygame.draw.rect(screen, (255, 255, 255), inner)
+
+            cu_text = get_font_small().render(lang_dict["check_updates"], True, (255, 255, 255))
+            screen.blit(cu_text, (settings_panel.x + 90, settings_panel.y + 195))
+            pygame.draw.rect(screen, (255, 255, 255), updates_check, 2)
+            if check_updates:
+                inner = updates_check.inflate(-6, -6)
                 pygame.draw.rect(screen, (255, 255, 255), inner)
 
         # Stats panel
